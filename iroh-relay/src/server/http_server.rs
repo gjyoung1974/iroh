@@ -1013,10 +1013,10 @@ mod tests {
         let rustls_key =
             rustls::pki_types::PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
         let config = rustls::ServerConfig::builder_with_provider(Arc::new(
-            rustls::crypto::ring::default_provider(),
+            crate::crypto_provider::default_provider(),
         ))
         .with_safe_default_protocol_versions()
-        .expect("protocols supported by ring")
+        .expect("protocols supported by crypto provider")
         .with_no_client_auth()
         .with_single_cert(vec![(rustls_certificate)], rustls_key.into())
         .expect("cert is right");

@@ -475,10 +475,14 @@ mod tests {
         let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()])
             .std_context("self signed")?;
         let key = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
-        let mut server_crypto = rustls::ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(vec![cert.cert.into()], key.into())
-            .std_context("tls")?;
+        let mut server_crypto = rustls::ServerConfig::builder_with_provider(Arc::new(
+            crate::crypto_provider::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .expect("protocols supported by crypto provider")
+        .with_no_client_auth()
+        .with_single_cert(vec![cert.cert.into()], key.into())
+        .std_context("tls")?;
         server_crypto.key_log = Arc::new(rustls::KeyLogFile::new());
         server_crypto.alpn_protocols = vec![ALPN_QUIC_ADDR_DISC.to_vec()];
         let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(

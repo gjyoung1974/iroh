@@ -21,10 +21,10 @@ pub fn self_signed_tls_certs_and_config() -> (
     let private_key = rustls::pki_types::PrivateKeyDer::from(private_key);
     let certs = vec![rustls_cert.clone()];
     let server_config = rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(
-        rustls::crypto::ring::default_provider(),
+        crate::crypto_provider::default_provider(),
     ))
     .with_safe_default_protocol_versions()
-    .expect("protocols supported by ring")
+    .expect("protocols supported by crypto provider")
     .with_no_client_auth();
 
     let server_config = server_config
