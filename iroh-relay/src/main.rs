@@ -535,10 +535,10 @@ async fn maybe_load_tls(
         return Ok(None);
     };
     let server_config = rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(
-        rustls::crypto::ring::default_provider(),
+        iroh_relay::crypto_provider::default_provider(),
     ))
     .with_safe_default_protocol_versions()
-    .expect("protocols supported by ring")
+    .expect("protocols supported by crypto provider")
     .with_no_client_auth();
     let (cert_config, server_config) = match tls.cert_mode {
         CertMode::Manual => {

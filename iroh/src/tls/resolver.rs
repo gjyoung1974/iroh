@@ -29,7 +29,7 @@ impl AlwaysResolvesCert {
 
         let client_private_key = PrivatePkcs8KeyDer::from_pem_slice(client_private_key.as_bytes())
             .expect("cannot open private key file");
-        let client_private_key = rustls::crypto::ring::sign::any_eddsa_type(&client_private_key)?;
+        let client_private_key = super::crypto_provider::any_eddsa_type(&client_private_key)?;
 
         let client_public_key = client_private_key
             .public_key()

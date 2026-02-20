@@ -36,7 +36,7 @@ netwatch = { version = "0.14" }
 papaya = { version = "0.2.3", default-features = false }
 pin-project = "1"
 pkarr = { version = "5", default-features = false, features = ["relays"] }
-quinn = { package = "iroh-quinn", version = "0.16.1", default-features = false, features = ["rustls-ring"] }
+quinn = { package = "iroh-quinn", version = "0.16.1", default-features = false }
 quinn-proto = { package = "iroh-quinn-proto", version = "0.15.1" }
 quinn-udp = { package = "iroh-quinn-udp", version = "0.8" }
 rand = "0.9.2"
@@ -45,7 +45,7 @@ reqwest = { version = "0.12", default-features = false, features = [
     "stream",
 ] }
 rustc-hash = "2"
-rustls = { version = "0.23.33", default-features = false, features = ["ring"] }
+rustls = { version = "0.23.33", default-features = false }
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 smallvec = "1.11.1"
 strum = { version = "0.27", features = ["derive"] }
@@ -59,7 +59,7 @@ tokio-stream = { version = "0.1.15", features = ["sync"] }
 tokio-util = { version = "0.7", features = ["io-util", "io", "rt"] }
 tracing = "0.1"
 url = { version = "2.5", features = ["serde"] }
-webpki = { package = "rustls-webpki", version = "0.103.7", features = ["ring"] }
+webpki = { package = "rustls-webpki", version = "0.103.7" }
 webpki_types = { package = "rustls-pki-types", version = "1.12" }
 webpki-roots = "1.0.3"
 pkcs8 = "0.11.0-rc.9"
@@ -81,7 +81,7 @@ hickory-resolver = "0.25.1"
 igd-next = { version = "0.16", features = ["aio_tokio"] }
 netdev = { version = "0.40.0" }
 portmapper = { version = "0.14", default-features = false }
-quinn = { package = "iroh-quinn", version = "0.16.1", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
+quinn = { package = "iroh-quinn", version = "0.16.1", default-features = false, features = ["runtime-tokio"] }
 tokio = { version = "1", features = [
     "io-util",
     "macros",
@@ -144,7 +144,7 @@ wasm-bindgen-test = "0.3"
 cfg_aliases = { version = "0.2.1" }
 
 [features]
-default = ["metrics", "fast-apple-datapath"]
+default = ["metrics", "fast-apple-datapath", "crypto-ring"]
 metrics = ["iroh-metrics/metrics", "iroh-relay/metrics", "portmapper/metrics"]
 test-utils = ["iroh-relay/test-utils", "iroh-relay/server", "dep:axum"]
 address-lookup-mdns = ["dep:swarm-discovery"]
@@ -152,6 +152,9 @@ address-lookup-pkarr-dht = ["pkarr/dht"]
 qlog = ["quinn/qlog"]
 # Use private Apple APIs to send multiple packets in a single syscall.
 fast-apple-datapath = ["quinn/fast-apple-datapath"]
+# Crypto backend selection — enable exactly one of these.
+crypto-ring = ["rustls/ring", "quinn/rustls-ring", "webpki/ring", "iroh-relay/crypto-ring"]
+crypto-aws-lc-rs = ["rustls/aws_lc_rs", "quinn/rustls-aws-lc-rs", "webpki/aws-lc-rs", "iroh-relay/crypto-aws-lc-rs"]
 
 [package.metadata.docs.rs]
 all-features = true

@@ -31,6 +31,7 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used))]
 
 pub mod client;
+pub mod crypto_provider;
 pub mod defaults;
 pub mod http;
 pub mod protos;

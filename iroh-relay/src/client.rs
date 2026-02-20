@@ -481,10 +481,10 @@ pub fn make_dangerous_client_config() -> rustls::ClientConfig {
         "Insecure config: SSL certificates from relay servers will be trusted without verification"
     );
     rustls::client::ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::ring::default_provider(),
+        crate::crypto_provider::default_provider(),
     ))
     .with_protocol_versions(&[&rustls::version::TLS13])
-    .expect("protocols supported by ring")
+    .expect("protocols supported by crypto provider")
     .dangerous()
     .with_custom_certificate_verifier(Arc::new(NoCertVerifier))
     .with_no_client_auth()
@@ -526,7 +526,7 @@ impl rustls::client::danger::ServerCertVerifier for NoCertVerifier {
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        rustls::crypto::ring::default_provider()
+        crate::crypto_provider::default_provider()
             .signature_verification_algorithms
             .supported_schemes()
     }

@@ -13,6 +13,7 @@ use tracing::warn;
 
 use self::resolver::AlwaysResolvesCert;
 
+pub(crate) mod crypto_provider;
 pub(crate) mod name;
 mod resolver;
 mod verifier;
@@ -70,10 +71,10 @@ impl TlsConfig {
         keylog: bool,
     ) -> QuicClientConfig {
         let mut crypto = rustls::ClientConfig::builder_with_provider(Arc::new(
-            rustls::crypto::ring::default_provider(),
+            crypto_provider::default_provider(),
         ))
         .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
-        .expect("version supported by ring")
+        .expect("version supported by crypto provider")
         .dangerous()
         .with_custom_certificate_verifier(self.server_verifier.clone())
         .with_client_cert_resolver(self.cert_resolver.clone());
@@ -104,10 +105,10 @@ impl TlsConfig {
         keylog: bool,
     ) -> QuicServerConfig {
         let mut crypto = rustls::ServerConfig::builder_with_provider(Arc::new(
-            rustls::crypto::ring::default_provider(),
+            crypto_provider::default_provider(),
         ))
         .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
-        .expect("fixed config")
+        .expect("version supported by crypto provider")
         .with_client_cert_verifier(self.client_verifier.clone())
         .with_cert_resolver(self.cert_resolver.clone());
         crypto.alpn_protocols = alpn_protocols;

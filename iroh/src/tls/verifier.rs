@@ -13,7 +13,7 @@ use rustls::{
     pki_types::CertificateDer as Certificate,
     server::danger::{ClientCertVerified, ClientCertVerifier},
 };
-use webpki::ring as webpki_algs;
+use super::crypto_provider::webpki_algs;
 use webpki_types::SubjectPublicKeyInfoDer;
 
 /// The only TLS version we support is 1.3

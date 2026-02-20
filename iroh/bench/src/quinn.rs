@@ -28,8 +28,17 @@ pub fn server_endpoint(
     key: PrivateKeyDer<'static>,
     opt: &Opt,
 ) -> (SocketAddr, quinn::Endpoint) {
-    let cert_chain = vec![cert];
-    let mut server_config = quinn::ServerConfig::with_single_cert(cert_chain, key).unwrap();
+    let server_crypto = rustls::ServerConfig::builder_with_provider(Arc::new(
+        crate::crypto_provider::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .unwrap()
+    .with_no_client_auth()
+    .with_single_cert(vec![cert], key)
+    .unwrap();
+    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(
+        quinn::crypto::rustls::QuicServerConfig::try_from(server_crypto).unwrap(),
+    ));
     server_config.transport = Arc::new(transport_config(opt.max_streams, opt.initial_mtu));
 
     let addr = if opt.use_ipv6 {
@@ -82,7 +91,7 @@ pub async fn connect_client(
     let mut roots = RootCertStore::empty();
     roots.add(server_cert).anyerr()?;
 
-    let provider = rustls::crypto::ring::default_provider();
+    let provider = crate::crypto_provider::default_provider();
 
     let crypto = rustls::ClientConfig::builder_with_provider(provider.into())
         .with_protocol_versions(&[&rustls::version::TLS13])

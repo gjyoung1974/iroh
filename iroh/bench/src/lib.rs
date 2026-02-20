@@ -14,6 +14,7 @@ use tokio::{
 };
 use tracing::info;
 
+pub mod crypto_provider;
 pub mod iroh;
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
 pub mod quinn;

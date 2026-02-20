@@ -1077,10 +1077,10 @@ fn default_quic_client_config() -> rustls::ClientConfig {
     let root_store =
         rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     rustls::client::ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::ring::default_provider(),
+        crate::tls::crypto_provider::default_provider(),
     ))
     .with_safe_default_protocol_versions()
-    .expect("ring supports these")
+    .expect("crypto provider supports these")
     .with_root_certificates(root_store)
     .with_no_client_auth()
 }
