@@ -15,6 +15,8 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use rustls::crypto::CryptoProvider;
+
 use iroh_base::{EndpointAddr, EndpointId, RelayUrl, SecretKey, TransportAddr};
 use iroh_relay::{RelayConfig, RelayMap};
 #[cfg(not(wasm_browser))]
@@ -107,6 +109,7 @@ pub struct Builder {
     transports: Vec<TransportConfig>,
     max_tls_tickets: usize,
     hooks: EndpointHooksList,
+    crypto_provider: Option<Arc<CryptoProvider>>,
 }
 
 impl From<RelayMode> for Option<TransportConfig> {
@@ -172,6 +175,7 @@ impl Builder {
             max_tls_tickets: DEFAULT_MAX_TLS_TICKETS,
             transports,
             hooks: Default::default(),
+            crypto_provider: None,
         }
     }
 
@@ -184,11 +188,19 @@ impl Builder {
             .secret_key
             .unwrap_or_else(move || SecretKey::generate(&mut rng));
 
-        let static_config = StaticConfig {
+        let crypto_provider = self.crypto_provider.unwrap_or_else(|| {
+            Arc::new(tls::crypto_provider::default_provider())
+        });
+
+        let static_config = Arc::new(StaticConfig {
             transport_config: self.transport_config.clone(),
-            tls_config: tls::TlsConfig::new(secret_key.clone(), self.max_tls_tickets),
+            tls_config: tls::TlsConfig::new(
+                secret_key.clone(),
+                self.max_tls_tickets,
+                crypto_provider.clone(),
+            ),
             keylog: self.keylog,
-        };
+        });
         let server_config = static_config.create_server_config(self.alpn_protocols);
 
         #[cfg(not(wasm_browser))]
@@ -208,6 +220,7 @@ impl Builder {
             insecure_skip_relay_cert_verify: self.insecure_skip_relay_cert_verify,
             metrics,
             hooks: self.hooks,
+            crypto_provider,
         };
 
         let sock = socket::Socket::spawn(sock_opts).await?;
@@ -216,7 +229,7 @@ impl Builder {
 
         let ep = Endpoint {
             sock,
-            static_config: Arc::new(static_config),
+            static_config,
         };
 
         // Add Address Lookup mechanisms
@@ -439,6 +452,21 @@ impl Builder {
         self
     }
 
+    /// Sets the [`rustls::crypto::CryptoProvider`] used for TLS.
+    ///
+    /// This allows using a custom cryptographic backend (e.g. `aws-lc-rs` for FIPS
+    /// compliance) instead of the default provider selected by feature flags.
+    ///
+    /// The provider is used for both endpoint-to-endpoint QUIC connections and
+    /// relay client connections.
+    ///
+    /// If not set, the default provider determined by the `crypto-ring` or
+    /// `crypto-aws-lc-rs` feature flag is used.
+    pub fn crypto_provider(mut self, provider: Arc<CryptoProvider>) -> Self {
+        self.crypto_provider = Some(provider);
+        self
+    }
+
     /// Sets the [ALPN] protocols that this endpoint will accept on incoming connections.
     ///
     /// Not setting this will still allow creating connections, but to accept incoming
@@ -633,7 +661,7 @@ impl Builder {
 
 /// Configuration for a [`quinn::Endpoint`] that cannot be changed at runtime.
 #[derive(Debug)]
-struct StaticConfig {
+pub(crate) struct StaticConfig {
     tls_config: tls::TlsConfig,
     transport_config: QuicTransportConfig,
     keylog: bool,
@@ -641,7 +669,7 @@ struct StaticConfig {
 
 impl StaticConfig {
     /// Create a [`ServerConfig`] with the specified ALPN protocols.
-    fn create_server_config(&self, alpn_protocols: Vec<Vec<u8>>) -> quinn_proto::ServerConfig {
+    pub(crate) fn create_server_config(&self, alpn_protocols: Vec<Vec<u8>>) -> quinn_proto::ServerConfig {
         let quic_server_config = self
             .tls_config
             .make_server_config(alpn_protocols, self.keylog);

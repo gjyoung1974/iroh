@@ -148,6 +148,8 @@ pub struct ClientBuilder {
     dns_resolver: DnsResolver,
     /// Cache for public keys of remote endpoints.
     key_cache: KeyCache,
+    /// Custom rustls crypto provider for TLS connections.
+    crypto_provider: Option<Arc<rustls::crypto::CryptoProvider>>,
 }
 
 impl ClientBuilder {
@@ -169,6 +171,7 @@ impl ClientBuilder {
             #[cfg(not(wasm_browser))]
             dns_resolver,
             key_cache: KeyCache::new(128),
+            crypto_provider: None,
         }
     }
 
@@ -207,6 +210,17 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets the [`rustls::crypto::CryptoProvider`] used for TLS connections to relay servers.
+    ///
+    /// If not set, the default provider determined by feature flags is used.
+    pub fn crypto_provider(
+        mut self,
+        provider: Arc<rustls::crypto::CryptoProvider>,
+    ) -> Self {
+        self.crypto_provider = Some(provider);
+        self
+    }
+
     /// Establishes a new connection to the relay server.
     #[cfg(not(wasm_browser))]
     pub async fn connect(&self) -> Result<Client, ConnectError> {
@@ -239,7 +253,8 @@ impl ClientBuilder {
         #[allow(unused_mut)]
         let mut builder = MaybeTlsStreamBuilder::new(dial_url.clone(), self.dns_resolver.clone())
             .prefer_ipv6(self.prefer_ipv6())
-            .proxy_url(self.proxy_url.clone());
+            .proxy_url(self.proxy_url.clone())
+            .crypto_provider(self.crypto_provider.clone());
 
         #[cfg(any(test, feature = "test-utils"))]
         if self.insecure_skip_cert_verify {

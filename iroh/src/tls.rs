@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use iroh_base::SecretKey;
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
+use rustls::crypto::CryptoProvider;
 use tracing::warn;
 
 use self::resolver::AlwaysResolvesCert;
@@ -38,6 +39,7 @@ pub(crate) const DEFAULT_MAX_TLS_TICKETS: usize = 8 * 32;
 #[derive(Debug)]
 pub(crate) struct TlsConfig {
     pub(crate) secret_key: SecretKey,
+    crypto_provider: Arc<CryptoProvider>,
     cert_resolver: Arc<AlwaysResolvesCert>,
     server_verifier: Arc<verifier::ServerCertificateVerifier>,
     client_verifier: Arc<verifier::ClientCertificateVerifier>,
@@ -45,12 +47,17 @@ pub(crate) struct TlsConfig {
 }
 
 impl TlsConfig {
-    pub(crate) fn new(secret_key: SecretKey, max_tls_tickets: usize) -> Self {
+    pub(crate) fn new(
+        secret_key: SecretKey,
+        max_tls_tickets: usize,
+        crypto_provider: Arc<CryptoProvider>,
+    ) -> Self {
         let cert_resolver = Arc::new(
             AlwaysResolvesCert::new(&secret_key).expect("Client cert key DER is valid; qed"),
         );
         Self {
             secret_key,
+            crypto_provider,
             cert_resolver,
             server_verifier: Arc::new(verifier::ServerCertificateVerifier),
             client_verifier: Arc::new(verifier::ClientCertificateVerifier),
@@ -70,9 +77,7 @@ impl TlsConfig {
         alpn_protocols: Vec<Vec<u8>>,
         keylog: bool,
     ) -> QuicClientConfig {
-        let mut crypto = rustls::ClientConfig::builder_with_provider(Arc::new(
-            crypto_provider::default_provider(),
-        ))
+        let mut crypto = rustls::ClientConfig::builder_with_provider(self.crypto_provider.clone())
         .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
         .expect("version supported by crypto provider")
         .dangerous()
@@ -104,9 +109,7 @@ impl TlsConfig {
         alpn_protocols: Vec<Vec<u8>>,
         keylog: bool,
     ) -> QuicServerConfig {
-        let mut crypto = rustls::ServerConfig::builder_with_provider(Arc::new(
-            crypto_provider::default_provider(),
-        ))
+        let mut crypto = rustls::ServerConfig::builder_with_provider(self.crypto_provider.clone())
         .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
         .expect("version supported by crypto provider")
         .with_client_cert_verifier(self.client_verifier.clone())
