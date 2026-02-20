@@ -151,6 +151,9 @@ pub(crate) struct Options {
 
     /// Static configuration for the endpoint.
     pub(crate) static_config: StaticConfig,
+
+    /// The rustls crypto provider to use for TLS connections.
+    pub(crate) crypto_provider: Arc<rustls::crypto::CryptoProvider>,
 }
 
 /// Inner state for an iroh [`crate::Endpoint`].
@@ -726,6 +729,7 @@ impl EndpointInner {
             metrics,
             hooks,
             static_config,
+            crypto_provider,
         } = opts;
 
         let address_lookup = address_lookup::ConcurrentAddressLookup::default();
@@ -768,6 +772,7 @@ impl EndpointInner {
             #[cfg(any(test, feature = "test-utils"))]
             insecure_skip_relay_cert_verify,
             metrics: metrics.socket.clone(),
+            crypto_provider: crypto_provider.clone(),
         };
 
         let shutdown_state = ShutdownState::default();
@@ -872,10 +877,10 @@ impl EndpointInner {
         let client_config = if insecure_skip_relay_cert_verify {
             iroh_relay::client::make_dangerous_client_config()
         } else {
-            default_quic_client_config()
+            default_quic_client_config(crypto_provider.clone())
         };
         #[cfg(not(any(test, feature = "test-utils")))]
-        let client_config = default_quic_client_config();
+        let client_config = default_quic_client_config(crypto_provider.clone());
 
         let net_report_config = net_report::Options::default();
 
@@ -1179,17 +1184,17 @@ impl EndpointInner {
     }
 }
 
-fn default_quic_client_config() -> rustls::ClientConfig {
+fn default_quic_client_config(
+    crypto_provider: Arc<rustls::crypto::CryptoProvider>,
+) -> rustls::ClientConfig {
     // create a client config for the endpoint to use for QUIC address discovery
     let root_store =
         rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    rustls::client::ClientConfig::builder_with_provider(Arc::new(
-        crate::tls::crypto_provider::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .expect("crypto provider supports these")
-    .with_root_certificates(root_store)
-    .with_no_client_auth()
+    rustls::client::ClientConfig::builder_with_provider(crypto_provider)
+        .with_safe_default_protocol_versions()
+        .expect("crypto provider supports these")
+        .with_root_certificates(root_store)
+        .with_no_client_auth()
 }
 
 #[derive(derive_more::Debug)]
@@ -1731,8 +1736,13 @@ mod tests {
 
     fn default_options<R: CryptoRng + ?Sized>(rng: &mut R) -> Options {
         let secret_key = SecretKey::generate(rng);
+        let crypto_provider = Arc::new(tls::crypto_provider::default_provider());
         let static_config = StaticConfig {
-            tls_config: tls::TlsConfig::new(secret_key.clone(), DEFAULT_MAX_TLS_TICKETS),
+            tls_config: tls::TlsConfig::new(
+                secret_key.clone(),
+                DEFAULT_MAX_TLS_TICKETS,
+                crypto_provider.clone(),
+            ),
             transport_config: QuicTransportConfig::default(),
             keylog: false,
         };
@@ -1753,6 +1763,7 @@ mod tests {
             metrics: Default::default(),
             hooks: Default::default(),
             static_config,
+            crypto_provider,
         }
     }
 
@@ -2124,8 +2135,13 @@ mod tests {
     /// Use [`socket_connect`] to establish connections.
     #[instrument(name = "ep", skip_all, fields(me = %secret_key.public().fmt_short()))]
     async fn socket_ep(secret_key: SecretKey) -> Result<EndpointInner> {
+        let crypto_provider = Arc::new(tls::crypto_provider::default_provider());
         let static_config = StaticConfig {
-            tls_config: tls::TlsConfig::new(secret_key.clone(), DEFAULT_MAX_TLS_TICKETS),
+            tls_config: tls::TlsConfig::new(
+                secret_key.clone(),
+                DEFAULT_MAX_TLS_TICKETS,
+                crypto_provider.clone(),
+            ),
             transport_config: QuicTransportConfig::default(),
             keylog: true,
         };
@@ -2146,6 +2162,7 @@ mod tests {
             metrics: Default::default(),
             hooks: Default::default(),
             static_config,
+            crypto_provider,
         };
         let sock = Socket::spawn(opts).await?;
         Ok(sock)
@@ -2189,9 +2206,12 @@ mod tests {
         transport_config: Arc<quinn::TransportConfig>,
     ) -> Result<quinn::Connection> {
         let alpns = vec![ALPN.to_vec()];
-        let quic_client_config =
-            tls::TlsConfig::new(ep_secret_key.clone(), DEFAULT_MAX_TLS_TICKETS)
-                .make_client_config(alpns, true);
+        let quic_client_config = tls::TlsConfig::new(
+            ep_secret_key.clone(),
+            DEFAULT_MAX_TLS_TICKETS,
+            Arc::new(tls::crypto_provider::default_provider()),
+        )
+        .make_client_config(alpns, true);
         let mut client_config = quinn::ClientConfig::new(Arc::new(quic_client_config));
         client_config.transport_config(transport_config);
         let connect = ep

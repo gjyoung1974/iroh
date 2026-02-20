@@ -15,6 +15,8 @@
 use std::net::SocketAddr;
 use std::{pin::Pin, sync::Arc};
 
+use rustls::crypto::CryptoProvider;
+
 use iroh_base::{EndpointAddr, EndpointId, RelayUrl, SecretKey, TransportAddr};
 use iroh_relay::{RelayConfig, RelayMap};
 #[cfg(not(wasm_browser))]
@@ -114,6 +116,7 @@ pub struct Builder {
     transports: Vec<TransportConfig>,
     max_tls_tickets: usize,
     hooks: EndpointHooksList,
+    crypto_provider: Option<Arc<CryptoProvider>>,
 }
 
 impl From<RelayMode> for Option<TransportConfig> {
@@ -179,6 +182,7 @@ impl Builder {
             max_tls_tickets: DEFAULT_MAX_TLS_TICKETS,
             transports,
             hooks: Default::default(),
+            crypto_provider: None,
         }
     }
 
@@ -191,9 +195,17 @@ impl Builder {
             .secret_key
             .unwrap_or_else(move || SecretKey::generate(&mut rng));
 
+        let crypto_provider = self.crypto_provider.unwrap_or_else(|| {
+            Arc::new(tls::crypto_provider::default_provider())
+        });
+
         let static_config = StaticConfig {
             transport_config: self.transport_config.clone(),
-            tls_config: tls::TlsConfig::new(secret_key.clone(), self.max_tls_tickets),
+            tls_config: tls::TlsConfig::new(
+                secret_key.clone(),
+                self.max_tls_tickets,
+                crypto_provider.clone(),
+            ),
             keylog: self.keylog,
         };
         let server_config = static_config.create_server_config(self.alpn_protocols);
@@ -216,6 +228,7 @@ impl Builder {
             metrics,
             hooks: self.hooks,
             static_config,
+            crypto_provider,
         };
 
         let inner = socket::Socket::spawn(sock_opts).await?;
@@ -445,6 +458,21 @@ impl Builder {
     /// [`PublicKey`]: iroh_base::PublicKey
     pub fn secret_key(mut self, secret_key: SecretKey) -> Self {
         self.secret_key = Some(secret_key);
+        self
+    }
+
+    /// Sets the [`rustls::crypto::CryptoProvider`] used for TLS.
+    ///
+    /// This allows using a custom cryptographic backend (e.g. `aws-lc-rs` for FIPS
+    /// compliance) instead of the default provider selected by feature flags.
+    ///
+    /// The provider is used for both endpoint-to-endpoint QUIC connections and
+    /// relay client connections.
+    ///
+    /// If not set, the default provider determined by the `crypto-ring` or
+    /// `crypto-aws-lc-rs` feature flag is used.
+    pub fn crypto_provider(mut self, provider: Arc<CryptoProvider>) -> Self {
+        self.crypto_provider = Some(provider);
         self
     }
 

@@ -29,6 +29,7 @@ pub struct MaybeTlsStreamBuilder {
     prefer_ipv6: bool,
     #[cfg(any(test, feature = "test-utils"))]
     insecure_skip_cert_verify: bool,
+    crypto_provider: Option<Arc<rustls::crypto::CryptoProvider>>,
 }
 
 impl MaybeTlsStreamBuilder {
@@ -40,6 +41,7 @@ impl MaybeTlsStreamBuilder {
             prefer_ipv6: false,
             #[cfg(any(test, feature = "test-utils"))]
             insecure_skip_cert_verify: false,
+            crypto_provider: None,
         }
     }
 
@@ -59,13 +61,22 @@ impl MaybeTlsStreamBuilder {
         self
     }
 
+    pub fn crypto_provider(
+        mut self,
+        provider: Option<Arc<rustls::crypto::CryptoProvider>>,
+    ) -> Self {
+        self.crypto_provider = provider;
+        self
+    }
+
     pub async fn connect(self) -> Result<MaybeTlsStream<ProxyStream>, ConnectError> {
         let roots = rustls::RootCertStore {
             roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
         };
-        let mut config = rustls::client::ClientConfig::builder_with_provider(Arc::new(
-            crate::crypto_provider::default_provider(),
-        ))
+        let provider = self
+            .crypto_provider.clone()
+            .unwrap_or_else(|| Arc::new(crate::crypto_provider::default_provider()));
+        let mut config = rustls::client::ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .expect("protocols supported by crypto provider")
         .with_root_certificates(roots)

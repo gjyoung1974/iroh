@@ -206,6 +206,7 @@ struct RelayConnectionOptions {
     prefer_ipv6: Arc<AtomicBool>,
     #[cfg(any(test, feature = "test-utils"))]
     insecure_skip_cert_verify: bool,
+    crypto_provider: Arc<rustls::crypto::CryptoProvider>,
 }
 
 /// Possible reasons for a failed relay connection.
@@ -293,6 +294,7 @@ impl ActiveRelayActor {
             prefer_ipv6,
             #[cfg(any(test, feature = "test-utils"))]
             insecure_skip_cert_verify,
+            crypto_provider,
         } = opts;
 
         let mut builder = relay::client::ClientBuilder::new(
@@ -301,7 +303,8 @@ impl ActiveRelayActor {
             #[cfg(not(wasm_browser))]
             dns_resolver,
         )
-        .address_family_selector(move || prefer_ipv6.load(Ordering::Relaxed));
+        .address_family_selector(move || prefer_ipv6.load(Ordering::Relaxed))
+        .crypto_provider(crypto_provider);
         if let Some(proxy_url) = proxy_url {
             builder = builder.proxy_url(proxy_url);
         }
@@ -842,6 +845,8 @@ pub struct Config {
     #[cfg(any(test, feature = "test-utils"))]
     pub insecure_skip_relay_cert_verify: bool,
     pub metrics: Arc<SocketMetrics>,
+    /// The rustls crypto provider for relay TLS connections.
+    pub crypto_provider: Arc<rustls::crypto::CryptoProvider>,
 }
 
 impl RelayActor {
@@ -1082,6 +1087,7 @@ impl RelayActor {
             prefer_ipv6: self.config.ipv6_reported.clone(),
             #[cfg(any(test, feature = "test-utils"))]
             insecure_skip_cert_verify: self.config.insecure_skip_relay_cert_verify,
+            crypto_provider: self.config.crypto_provider.clone(),
         };
 
         // TODO: Replace 64 with PER_CLIENT_SEND_QUEUE_DEPTH once that's unused
@@ -1253,6 +1259,7 @@ mod tests {
                 proxy_url: None,
                 prefer_ipv6: Arc::new(AtomicBool::new(true)),
                 insecure_skip_cert_verify: true,
+                crypto_provider: Arc::new(crate::tls::crypto_provider::default_provider()),
             },
             stop_token,
             metrics: Default::default(),
